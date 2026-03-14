@@ -1,0 +1,14 @@
+import pandas as pd
+import io
+
+conteudo_log = """# Este é um cabeçalho de comentário
+# Data da geração: 2024-01-01
+id_evento,tipo,timestamp,descricao
+1,login,2024-01-01 08:00:00,Usuário admin logou
+2,erro,2024-01-01 08:05:10,Falha ao carregar módulo X
+3,login,2024-01-01 08:10:00,Usuário convidado logou
+4,sucesso,2024-01-01 08:15:30,Operação concluída"""
+
+df_log = pd.read_csv(io.StringIO(conteudo_log), skiprows=2, nrows=2, engine='python')
+
+print(df_log)
