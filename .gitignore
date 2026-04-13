@@ -1,0 +1,4 @@
+# No arquivo .gitignore
+.env
+__pycache__/
+*.log
