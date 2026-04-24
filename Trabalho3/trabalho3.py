@@ -8,6 +8,11 @@ import seaborn as sns
 import logging
 from datetime import datetime
 from dotenv import load_dotenv
+from dotenv import load_dotenv
+
+# NOVO: Carregar as variáveis de ambiente do arquivo .env
+load_dotenv()
+
 # --- CONFIGURAÇÕES ---
 ARQUIVO_ZIP = "Base_10_anos.zip"
 ARQUIVO_CSV_EXTRAIDO = "dados_anac_raw.csv"
@@ -124,42 +129,100 @@ def carregar_mysql(df):
 
 # --- ETAPA 4: VISUALIZAÇÃO -----
 def gerar_visualizacoes(df):
-    print("Gerando gráficos para o Moodle...")
+    print("Gerando gráficos e estatísticas para o Moodle...")
     # Padroniza as colunas para maiúsculo
     df.columns = [c.upper() for c in df.columns]
     
+    # NOVO: Dicionário para mapear e traduzir as siglas das empresas
+    if 'EMPRESA' in df.columns:
+        mapa_empresas = {
+            'GLO': 'GOL',
+            'AZU': 'Azul',
+            'TAM': 'LATAM',
+            'ONE': 'Avianca',
+            'TIB': 'TRIP'
+            # Adicione outras siglas se achar necessário
+        }
+        # Substitui os valores na coluna
+        df['EMPRESA'] = df['EMPRESA'].replace(mapa_empresas)
+
+    # NOVO: Exibição dos Dados Estatísticos (Média e Moda)
+    print("\n" + "="*40)
+    print("📊 DADOS ESTATÍSTICOS DA AMOSTRA")
+    print("="*40)
+    if 'PASSAGEIROS' in df.columns:
+        print(f"Passageiros - Média: {df['PASSAGEIROS'].mean():.2f}")
+        print(f"Passageiros - Moda:  {df['PASSAGEIROS'].mode()[0]}") # [0] pega o valor mais frequente caso haja empate
+    
+    if 'CARGA' in df.columns:
+        print(f"Carga (Kg)  - Média: {df['CARGA'].mean():.2f}")
+        print(f"Carga (Kg)  - Moda:  {df['CARGA'].mode()[0]}")
+    print("="*40 + "\n")
+
     try:
-        
+        # 1. GRÁFICO DE PIZZA
         if 'EMPRESA' in df.columns and 'PASSAGEIROS' in df.columns:
             plt.figure(figsize=(10, 8))
             
             # Agrupa por empresa e soma passageiros, pegando as top 5
             top_pax = df.groupby('EMPRESA')['PASSAGEIROS'].sum().nlargest(5)
             
-            # Cria o gráfico de pizza
-            top_pax.plot(kind='pie', autopct='%1.1f%%', startangle=140, shadow=True, cmap='Paired')
+            # Cria o gráfico de pizza usando plt.pie para conseguirmos separar a legenda
+            wedges, texts, autotexts = plt.pie(
+                top_pax, 
+                autopct='%1.1f%%', 
+                startangle=140, 
+                shadow=True, 
+                colors=plt.cm.Paired.colors # Usa as cores do Matplotlib
+            )
             
             plt.title("Participação das Top 5 Empresas (Volume de Passageiros)")
-            plt.ylabel("") # Remove o nome da coluna no eixo Y
-            plt.tight_layout()
             
-            plt.savefig("grafico_pizza_anac.png")
-            print("✔ Gráfico 1: Pizza (Market Share) gerado.")
+            # Adiciona a legenda explícita indicando a cor de cada empresa
+            plt.legend(wedges, top_pax.index, title="Empresas Aéreas", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+            
+            plt.tight_layout()
+            plt.savefig("grafico_pizza_anac.png", bbox_inches='tight')
+            print("✔ Gráfico 1: Pizza (Market Share com Legenda) gerado.")
 
         # 2. GRÁFICO DE DISPERSÃO 
-        if 'PASSAGEIROS' in df.columns and 'CARGA' in df.columns:
-            plt.figure(figsize=(10, 6))
-            sns.scatterplot(data=df, x='PASSAGEIROS', y='CARGA', hue='ANO', palette='viridis', alpha=0.7)
-            plt.title("Dispersão: Relação entre Passageiros e Carga Paga")
+        if 'PASSAGEIROS' in df.columns and 'CARGA' in df.columns and 'EMPRESA' in df.columns:
+            plt.figure(figsize=(12, 7)) # Aumentei um pouco o tamanho da figura
+            
+            # NOVO: Filtra para mostrar apenas as 10 maiores empresas (evita poluição visual)
+            top_10_empresas = df.groupby('EMPRESA')['PASSAGEIROS'].sum().nlargest(10).index
+            df_dispersao = df[df['EMPRESA'].isin(top_10_empresas)]
+            
+            # Usa o dataframe filtrado (df_dispersao)
+            sns.scatterplot(
+                data=df_dispersao, 
+                x='PASSAGEIROS', 
+                y='CARGA', 
+                hue='EMPRESA', 
+                palette='tab10', # Paleta melhor para categorias
+                alpha=0.7,
+                s=60 # Aumenta um pouquinho o tamanho dos pontos
+            )
+            
+            plt.title("Dispersão: Relação entre Passageiros e Carga Paga (Top 10 Empresas)")
+            
+            # NOVO: Legenda ajustada (agora só terá 10 itens, cabendo perfeitamente)
+            plt.legend(title='Empresa Aérea', bbox_to_anchor=(1.02, 1), loc='upper left')
+            
             plt.grid(True, linestyle='--', alpha=0.5)
-            plt.savefig("grafico_dispersao_anac.png")
-            print("✔ Gráfico 2: Scatter Plot gerado.")
+            
+            # Ajusta os espaçamentos para nada ser cortado
+            plt.tight_layout() 
+            
+            plt.savefig("grafico_dispersao_anac.png", bbox_inches='tight', dpi=300) # dpi=300 melhora a qualidade da imagem
+            print("✔ Gráfico 2: Scatter Plot (Com Cores e Filtrado) gerado.")
             
         plt.close('all')
         
     except Exception as e:
         print(f"⚠ Erro ao gerar os gráficos: {e}")
-        # --- BLOCO DE EXECUÇÃO -----
+
+# --- BLOCO DE EXECUÇÃO -----
 if __name__ == "__main__":
     print(f"--- Pipeline Iniciado: {datetime.now().strftime('%H:%M:%S')} ---")
     
@@ -172,7 +235,7 @@ if __name__ == "__main__":
             # 3. Carrega no MySQL
             carregar_mysql(dados)
             
-            # 4. Gera os gráficos
+            # 4. Gera os gráficos e estatísticas
             gerar_visualizacoes(dados)
             
             print(f"--- Pipeline Finalizado com Sucesso às {datetime.now().strftime('%H:%M:%S')} ---")
